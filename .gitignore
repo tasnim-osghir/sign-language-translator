@@ -218,3 +218,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Secrets
+.env
+.env.*
+
+# Données et modèles lourds ou sensibles
+datasets/
+data/raw/
+*.mp4
+*.avi
+*.mov
+*.zip
+*.h5
+*.keras
+*.joblib
+*.pkl
+*.pt
+
+# Outils
+.ruff_cache/
+.coverage
+.vscode/
+.idea/
