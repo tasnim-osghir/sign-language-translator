@@ -1,6 +1,6 @@
 # AI + AR Sign Language Translator
 
-Real-time translation of Moroccan Sign Language (MSL) into Darija,
+Real-time translation of sign language into English,
 with an augmented reality overlay and speech synthesis.
 Module: AI for Augmented Reality.
 
