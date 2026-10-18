@@ -241,3 +241,7 @@ data/raw/
 .coverage
 .vscode/
 .idea/
+# Dataset arrays and tables (large files, redistribution restricted)
+*.npz
+*.npy
+*.parquet
