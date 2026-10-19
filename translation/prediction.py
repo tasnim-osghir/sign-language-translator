@@ -10,7 +10,7 @@ _SIGN_ID = re.compile(r"[A-Z][A-Z0-9_]{0,31}")
 
 @dataclass(frozen=True)
 class Prediction:
-    sign: str          # identifiant ASCII, ex. "SALAM"
+    sign: str          # identifiant ASCII, ex. "HELLO"
     confidence: float  # entre 0.0 et 1.0
 
     def __post_init__(self):
