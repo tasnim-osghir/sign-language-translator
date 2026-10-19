@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
-import numpy as np
-import mediapipe
+
 import cv2
+import mediapipe
+import numpy as np
 import sklearn
 
 DATA_DIR = Path.home() / "Projects" / "asl-data"

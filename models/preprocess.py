@@ -1,5 +1,6 @@
 import hashlib
 from pathlib import Path
+
 import numpy as np
 
 DATA_DIR = Path.home() / "Projects" / "asl-data"

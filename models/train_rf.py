@@ -1,11 +1,10 @@
 import json
 from pathlib import Path
-import numpy as np
-import matplotlib
-matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 DATA_DIR = Path.home() / "Projects" / "asl-data"
 N_TEST_PEOPLE = 4
