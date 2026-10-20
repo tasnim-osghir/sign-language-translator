@@ -1,8 +1,8 @@
 
 """Detect left and right hands using MediaPipe Hands."""
 
-import numpy as np
 import mediapipe as mp
+import numpy as np
 
 
 class HandTracker:
