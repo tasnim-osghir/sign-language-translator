@@ -245,3 +245,5 @@ data/raw/
 *.npz
 *.npy
 *.parquet
+# MediaPipe model files
+*.task
