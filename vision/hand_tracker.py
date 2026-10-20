@@ -1,106 +1,113 @@
-"""Hand landmarks (21 points per hand) with MediaPipe.
 
-Supports both MediaPipe APIs:
-  - legacy  mp.solutions.hands
-  - new     mp.tasks (needs models/hand_landmarker.task)
+"""Detect left and right hands using MediaPipe Hands."""
 
-Handedness: MediaPipe assumes a mirrored (selfie) image. We feed the
-ORIGINAL image, so its "Left"/"Right" label may be the opposite of the
-real hand. Use SWAP_HANDEDNESS (or env VISION_SWAP_HANDEDNESS=1) to
-invert. It MUST match the convention used to build the training data.
-"""
-
-
-
+import mediapipe as mp
 import numpy as np
-import os
-
-SWAP_HANDEDNESS = os.environ.get("VISION_SWAP_HANDEDNESS", "0") == "1"
-HAND_MODEL_PATH = os.environ.get(
-    "VISION_HAND_MODEL", os.path.join("models", "hand_landmarker.task")
-)
-
-HAND_CONNECTIONS = [
-    (0, 1), (1, 2), (2, 3), (3, 4),
-    (0, 5), (5, 6), (6, 7), (7, 8),
-    (5, 9), (9, 10), (10, 11), (11, 12),
-    (9, 13), (13, 14), (14, 15), (15, 16),
-    (13, 17), (17, 18), (18, 19), (19, 20),
-    (0, 17),
-]
-
-
-def _slot(label, swap=SWAP_HANDEDNESS):
-    """Return 0 for left slot, 1 for right slot."""
-    is_left = label == "Left"
-    if swap:
-        is_left = not is_left
-    return 0 if is_left else 1
 
 
 class HandTracker:
-    def __init__(self, max_hands=2, det_conf=0.5, track_conf=0.5, swap=None):
-        import mediapipe as mp
+    def __init__(
+        self,
+        max_num_hands=2,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+        input_is_mirrored=False,
+    ):
+        if not hasattr(mp, "solutions"):
+            raise RuntimeError(
+                "This implementation requires MediaPipe's "
+                "mp.solutions API. Check your installed version."
+            )
 
-        self.swap = SWAP_HANDEDNESS if swap is None else swap
-        self._mp = mp
-        self._legacy = hasattr(mp, "solutions") and hasattr(
-            mp.solutions, "hands"
+        self.mp_hands = mp.solutions.hands
+        self.mp_drawing = mp.solutions.drawing_utils
+
+        self.input_is_mirrored = input_is_mirrored
+
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=max_num_hands,
+            model_complexity=1,
+            min_detection_confidence=min_detection_confidence,
+            min_tracking_confidence=min_tracking_confidence,
         )
-        if self._legacy:
-            self._hands = mp.solutions.hands.Hands(
-                static_image_mode=False,
-                max_num_hands=max_hands,
-                min_detection_confidence=det_conf,
-                min_tracking_confidence=track_conf,
-            )
-        else:
-            from mediapipe.tasks import python as mp_python
-            from mediapipe.tasks.python import vision as mp_vision
 
-            if not os.path.exists(HAND_MODEL_PATH):
-                raise FileNotFoundError(
-                    f"{HAND_MODEL_PATH} not found (needed by mp.tasks)"
-                )
-            options = mp_vision.HandLandmarkerOptions(
-                base_options=mp_python.BaseOptions(
-                    model_asset_path=HAND_MODEL_PATH
-                ),
-                running_mode=mp_vision.RunningMode.VIDEO,
-                num_hands=max_hands,
-                min_hand_detection_confidence=det_conf,
-                min_tracking_confidence=track_conf,
-            )
-            self._hands = mp_vision.HandLandmarker.create_from_options(options)
+    @staticmethod
+    def _empty_hand():
+        """Return 21 missing landmarks."""
+        return np.full((21, 3), np.nan, dtype=np.float32)
 
-    def process(self, rgb, timestamp_ms=0):
-        """Return (left, right), each (21, 3) or None. Input: ORIGINAL RGB."""
-        found = []  # (slot, score, array)
-        if self._legacy:
-            res = self._hands.process(rgb)
-            if res.multi_hand_landmarks:
-                for lms, hd in zip(res.multi_hand_landmarks, res.multi_handedness):
-                    cls = hd.classification[0]
-                    arr = np.array(
-                        [[p.x, p.y, p.z] for p in lms.landmark], dtype=np.float32
+    @staticmethod
+    def _to_array(hand_landmarks):
+        """Keep raw normalized x, y, z values."""
+        return np.array(
+            [
+                [point.x, point.y, point.z]
+                for point in hand_landmarks.landmark
+            ],
+            dtype=np.float32,
+        )
+
+    def process(self, frame):
+        """
+        Process an ORIGINAL, unflipped BGR webcam frame.
+
+        Returns:
+            {
+                "left_hand": ndarray (21, 3),
+                "right_hand": ndarray (21, 3),
+                "results": MediaPipe results
+            }
+        """
+        if frame is None:
+            raise ValueError("Input frame cannot be None.")
+
+        rgb_frame = __import__("cv2").cvtColor(
+            frame, __import__("cv2").COLOR_BGR2RGB
+        )
+
+        results = self.hands.process(rgb_frame)
+
+        left_hand = self._empty_hand()
+        right_hand = self._empty_hand()
+
+        if results.multi_hand_landmarks and results.multi_handedness:
+            for landmarks, handedness in zip(
+                results.multi_hand_landmarks,
+                results.multi_handedness,
+            ):
+                label = handedness.classification[0].label
+
+                # MediaPipe Hands assumes mirrored selfie input.
+                # For an original, unmirrored frame, swap the labels.
+                if not self.input_is_mirrored:
+                    label = (
+                        "Right" if label == "Left" else "Left"
                     )
-                    found.append((_slot(cls.label, self.swap), cls.score, arr))
-        else:
-            mp = self._mp
-            img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            res = self._hands.detect_for_video(img, int(timestamp_ms))
-            for lms, hd in zip(res.hand_landmarks, res.handedness):
-                cat = hd[0]
-                arr = np.array([[p.x, p.y, p.z] for p in lms], dtype=np.float32)
-                found.append((_slot(cat.category_name, self.swap), cat.score, arr))
 
-        out = [None, None]
-        best = [-1.0, -1.0]
-        for slot, score, arr in found:  # keep best score per slot
-            if score > best[slot]:
-                best[slot] = score
-                out[slot] = arr
-        return out[0], out[1]
+                points = self._to_array(landmarks)
+
+                if label == "Left":
+                    left_hand = points
+                elif label == "Right":
+                    right_hand = points
+
+        return {
+            "left_hand": left_hand,
+            "right_hand": right_hand,
+            "results": results,
+        }
+
+    def draw(self, frame, results):
+        """Draw detected hand landmarks on a display frame."""
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                self.mp_drawing.draw_landmarks(
+                    frame,
+                    hand_landmarks,
+                    self.mp_hands.HAND_CONNECTIONS,
+                )
+        return frame
 
     def close(self):
-        self._hands.close()
+        self.hands.close()
