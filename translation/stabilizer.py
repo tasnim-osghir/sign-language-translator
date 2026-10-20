@@ -2,14 +2,16 @@
 
 Le modele predit image par image et peut hesiter. Le Stabilizer ne renvoie un
 signe que s'il est majoritaire et vu au moins min_votes fois dans la fenetre.
+Les predictions sous min_confidence comptent comme "pas de signe".
 """
+import numbers
 from collections import deque
 
 from .prediction import Prediction
 
 
 class Stabilizer:
-    def __init__(self, window=10, min_votes=7):
+    def __init__(self, window=10, min_votes=7, min_confidence=0.0):
         for name, value in (("window", window), ("min_votes", min_votes)):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise TypeError(f"{name} must be an int")
@@ -17,20 +19,31 @@ class Stabilizer:
             raise ValueError("window must be >= 1")
         if not 1 <= min_votes <= window:
             raise ValueError("min_votes must be between 1 and window")
+        if isinstance(min_confidence, bool) or not isinstance(
+            min_confidence, numbers.Real
+        ):
+            raise TypeError("min_confidence must be a real number")
+        # Ecrit ainsi, le test rejette aussi NaN.
+        if not 0.0 <= min_confidence <= 1.0:
+            raise ValueError("min_confidence must be in [0, 1]")
 
         self.window = window
         self.min_votes = min_votes
+        self.min_confidence = float(min_confidence)
         # Une entree par image : la Prediction, ou None si rien n'a ete predit.
         self._entries = deque(maxlen=window)
 
     def update(self, prediction: Prediction | None) -> Prediction | None:
         """Ajoute une prediction a la fenetre. Renvoie le signe stable, ou None.
 
-        Le signe stable est celui qui a le plus de votes (en cas d'egalite, le
-        plus recent) ; sa confiance est la moyenne de ses entrees.
+        Une prediction sous min_confidence est ajoutee comme None (pas de
+        signe). Le signe stable est celui qui a le plus de votes (en cas
+        d'egalite, le plus recent) ; sa confiance est la moyenne de ses entrees.
         """
         if prediction is not None and not isinstance(prediction, Prediction):
             raise TypeError("update() expects a Prediction or None")
+        if prediction is not None and prediction.confidence < self.min_confidence:
+            prediction = None
         self._entries.append(prediction)
 
         confidences = {}
