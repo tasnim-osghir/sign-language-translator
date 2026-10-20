@@ -108,3 +108,42 @@ def test_reset_clears_window():
     assert stabilizer.update(HELLO) is None
     assert stabilizer.update(HELLO) is None
     assert stabilizer.update(HELLO) == HELLO
+
+
+@pytest.mark.parametrize("min_confidence", [True, "0.5", None])
+def test_invalid_min_confidence_type(min_confidence):
+    with pytest.raises(TypeError):
+        Stabilizer(min_confidence=min_confidence)
+
+
+@pytest.mark.parametrize("min_confidence", [-0.1, 1.1, float("nan")])
+def test_invalid_min_confidence_value(min_confidence):
+    with pytest.raises(ValueError):
+        Stabilizer(min_confidence=min_confidence)
+
+
+def test_prediction_below_min_confidence_is_not_a_vote():
+    stabilizer = Stabilizer(window=3, min_votes=1, min_confidence=0.5)
+    assert stabilizer.update(Prediction("HELLO", 0.49)) is None
+
+
+def test_prediction_equal_to_min_confidence_is_a_vote():
+    stabilizer = Stabilizer(window=3, min_votes=1, min_confidence=0.5)
+    assert stabilizer.update(Prediction("HELLO", 0.5)) == Prediction("HELLO", 0.5)
+
+
+def test_weak_entries_break_stability():
+    stabilizer = Stabilizer(window=10, min_votes=7, min_confidence=0.5)
+    weak = Prediction("HELLO", 0.3)
+    for prediction in [HELLO, weak, HELLO, weak, HELLO, weak, HELLO]:
+        result = stabilizer.update(prediction)
+    assert result is None  # seulement 4 votes HELLO sur 7 requis
+
+
+def test_default_min_confidence_keeps_behavior():
+    stabilizer = Stabilizer(window=3, min_votes=3)
+    assert stabilizer.min_confidence == 0.0
+    low = Prediction("HELLO", 0.0)
+    for _ in range(3):
+        result = stabilizer.update(low)
+    assert result == low
