@@ -2,8 +2,8 @@
 """Detect the first 25 MediaPipe Pose landmarks."""
 
 import cv2
-import numpy as np
 import mediapipe as mp
+import numpy as np
 
 
 class PoseTracker:
