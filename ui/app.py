@@ -30,8 +30,15 @@ def keyboard_predictor(frame, key):
     return _KEY_PREDICTIONS.get(key)
 
 
-def run(camera_index: int = 0, get_prediction=keyboard_predictor) -> None:
-    engine = TranslationEngine()
+def run(camera_index: int = 0, get_prediction=keyboard_predictor,
+        engine=None, on_word=None) -> None:
+    """Open the window.
+
+    engine: an existing TranslationEngine (created here if None).
+    on_word: called with each newly validated word (e.g. by the voice module).
+    """
+    if engine is None:
+        engine = TranslationEngine()
 
     def toggle_voice():
         engine.voice_enabled = not engine.voice_enabled
@@ -66,7 +73,9 @@ def run(camera_index: int = 0, get_prediction=keyboard_predictor) -> None:
                     engine.clear()
 
                 prediction = get_prediction(frame, key)
-                engine.update(prediction)
+                word = engine.update(prediction)
+                if word is not None and on_word is not None:
+                    on_word(word)
                 if prediction is not None:
                     last_prediction = prediction
 
