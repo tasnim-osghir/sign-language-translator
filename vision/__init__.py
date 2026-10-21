@@ -1,7 +1,20 @@
-"""Vision module: camera -> MediaPipe (hands + pose) -> (67, 3) landmarks.
 
-Heavy imports (cv2, mediapipe) are done lazily so that this package can be
-imported in CI, where no camera or GPU is available.
-"""
+"""Computer vision module for sign-language recognition."""
 
-__version__ = "0.1.0"
+from .camera import Camera
+from .hand_tracker import HandTracker
+from .pose_tracker import PoseTracker
+from .preprocessing import (
+    combine_landmarks,
+    flatten_landmarks,
+    landmarks_to_model_input,
+)
+
+__all__ = [
+    "Camera",
+    "HandTracker",
+    "PoseTracker",
+    "combine_landmarks",
+    "flatten_landmarks",
+    "landmarks_to_model_input",
+]

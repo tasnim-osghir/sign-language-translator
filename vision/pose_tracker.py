@@ -1,5 +1,5 @@
 
-"""Detect the first 25 MediaPipe Pose landmarks."""
+"""MediaPipe Pose detection for the sign-language translator."""
 
 import cv2
 import mediapipe as mp
@@ -14,8 +14,8 @@ class PoseTracker:
     ):
         if not hasattr(mp, "solutions"):
             raise RuntimeError(
-                "This implementation requires MediaPipe's "
-                "mp.solutions API. Check your installed version."
+                "mp.solutions is unavailable in this MediaPipe installation. "
+                "Check your MediaPipe version."
             )
 
         self.mp_pose = mp.solutions.pose
@@ -31,30 +31,28 @@ class PoseTracker:
         )
 
     @staticmethod
-    def _empty_pose():
-        """Return 25 missing landmarks."""
+    def empty_pose():
+        """Return 25 missing pose landmarks as NaN."""
         return np.full((25, 3), np.nan, dtype=np.float32)
 
     def process(self, frame):
         """
-        Process an ORIGINAL, unflipped BGR frame.
+        Process an original BGR frame without flipping it.
 
         Returns:
-            {
-                "pose": ndarray (25, 3),
-                "results": MediaPipe results
-            }
+            pose:    NumPy array with shape (25, 3)
+            results: MediaPipe Pose results
         """
         if frame is None:
-            raise ValueError("Input frame cannot be None.")
+            raise ValueError("The input frame cannot be None.")
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.pose.process(rgb_frame)
 
-        pose_points = self._empty_pose()
+        pose_points = self.empty_pose()
 
         if results.pose_landmarks:
-            all_points = np.array(
+            all_points = np.asarray(
                 [
                     [point.x, point.y, point.z]
                     for point in results.pose_landmarks.landmark
@@ -62,7 +60,7 @@ class PoseTracker:
                 dtype=np.float32,
             )
 
-            # Keep landmarks 0 through 24 in their original order.
+            # Keep Pose landmarks 0 through 24, in their original order.
             pose_points = all_points[:25].copy()
 
         return {
@@ -71,7 +69,7 @@ class PoseTracker:
         }
 
     def draw(self, frame, results):
-        """Draw pose landmarks on a display frame."""
+        """Draw pose landmarks for visualization."""
         if results.pose_landmarks:
             self.mp_drawing.draw_landmarks(
                 frame,
@@ -81,4 +79,5 @@ class PoseTracker:
         return frame
 
     def close(self):
+        """Release MediaPipe resources."""
         self.pose.close()
