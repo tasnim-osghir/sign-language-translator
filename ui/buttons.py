@@ -1,6 +1,6 @@
 """Clickable buttons drawn on the OpenCV window."""
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
 
 import cv2
 
@@ -9,9 +9,9 @@ from .overlay import FONT, WHITE
 
 @dataclass
 class Button:
-    label: Union[str, Callable[[], str]]
+    label: str | Callable[[], str]
     on_click: Callable[[], None]
-    is_on: Optional[Callable[[], bool]] = None  # None = neutral button
+    is_on: Callable[[], bool] | None = None  # None = neutral button
     rect: tuple = (0, 0, 0, 0)  # x1, y1, x2, y2 (set by ButtonBar)
 
     def text(self) -> str:
