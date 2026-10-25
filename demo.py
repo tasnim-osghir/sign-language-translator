@@ -81,8 +81,8 @@ def run_keyboard(camera_index: int = DEFAULT_CAMERA) -> None:
     try:
         with Camera(camera_index) as camera:
             while True:
-                frame = camera.read()
-                if frame is None:
+                ok, frame = camera.read()
+                if not ok or frame is None:
                     print("Failed to capture frame.")
                     break
 
@@ -155,8 +155,8 @@ def run_real(
 
         while True:
             # The ORIGINAL frame goes to the extractor; never the mirrored copy.
-            frame = camera.read()
-            if frame is None:
+            ok, frame = camera.read()
+            if not ok or frame is None:
                 print("Failed to capture frame.")
                 break
 

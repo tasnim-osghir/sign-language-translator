@@ -60,8 +60,8 @@ def run(camera_index: int = 0, get_prediction=keyboard_predictor,
     try:
         with Camera(camera_index) as camera:
             while True:
-                frame = camera.read()
-                if frame is None:
+                ok, frame = camera.read()
+                if not ok or frame is None:
                     print("Failed to capture frame.")
                     break
                 frame = cv2.flip(frame, 1)
