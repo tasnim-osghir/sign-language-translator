@@ -117,6 +117,32 @@ def test_on_word_resets_model_and_votes():
     assert pipeline.get_prediction(frame, -1) is None
 
 
+class FakeSpeaker:
+    def __init__(self):
+        self.words = []
+
+    def speak(self, word):
+        self.words.append(word)
+        return True
+
+
+def test_on_word_speaks_the_word():
+    speaker = FakeSpeaker()
+    pipeline = RealPipeline(
+        FakeExtractor(),
+        FakePredictor(),
+        Stabilizer(window=3, min_votes=2),
+        unmirror=mirror,
+        speaker=speaker,
+    )
+    pipeline.on_word("HELLO")
+    assert speaker.words == ["HELLO"]
+
+
+def test_on_word_without_speaker_still_works():
+    make_pipeline().on_word("HELLO")
+
+
 def test_no_hand_resets_once_after_threshold():
     predictor = FakePredictor(result=None)
     pipeline = make_pipeline(extractor=FakeExtractor(hand=False), predictor=predictor)

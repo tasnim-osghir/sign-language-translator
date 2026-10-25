@@ -143,9 +143,11 @@ def run_real(
     from models import predictor
     from vision.camera import Camera
     from vision.landmarks import LandmarkExtractor
+    from voice import Speaker
 
     extractor = None
     camera = None
+    speaker = None
     try:
         try:
             # Loads the model now (with its hash check), not at the first sign.
@@ -164,6 +166,8 @@ def run_real(
             print(f"Camera error: {error}")
             return 1
 
+        # Speaks each new word in the background; never blocks this loop.
+        speaker = Speaker(engine)
         predictor.reset()
         frames_without_hand = 0
 
@@ -185,6 +189,7 @@ def run_real(
             if word is not None:
                 predictor.reset()
                 stabilizer.reset()
+                speaker.speak(word)
 
             if left or right:
                 frames_without_hand = 0
@@ -221,6 +226,8 @@ def run_real(
         return 0
 
     finally:
+        if speaker is not None:
+            speaker.close()
         if camera is not None:
             camera.release()
         if extractor is not None:

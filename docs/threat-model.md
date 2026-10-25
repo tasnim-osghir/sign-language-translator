@@ -33,8 +33,8 @@ Camera -> Vision -> AI model -> [ Translation engine ] -> Screen / Voice
 | Tampering | Model, dataset (poisoning) or a dependency modified | Hashes, Pull Request reviews, pinned dependencies, pip-audit | S4, S6 | Partly |
 | Repudiation | Nobody knows who changed what | Git history, mandatory Pull Requests, protected branches | - | Git in use |
 | Information disclosure | Video or landmarks leaked; secret in Git; verbose logs | Local processing only; secret detection; minimal logs; consent message | S3, S7, S8, S10 | To verify |
-| Denial of service | Flood of predictions; voice spam; app blocked by speech | Bounded memory (max 50 words); cooldown; separate voice thread | S9 | Memory bound tested; cooldown to do |
-| Elevation of privilege | Command injection through text; loading an untrusted `.pkl` file | Strict sign format (capital letters only); no shell commands; no unknown files loaded | S5 | Format tested |
+| Denial of service | Flood of predictions; voice spam; app blocked by speech | Bounded memory (max 50 words); cooldown; one voice thread with a bounded queue (5 words, oldest dropped, never blocks) | S9 | Memory bound and voice queue tested; cooldown to do |
+| Elevation of privilege | Command injection through text; loading an untrusted `.pkl` file | Strict sign format (capital letters only); voice uses no shell and speaks only allowlisted words in a strict text format; no unknown files loaded | S5 | Format and voice tested |
 
 ## 4. Threats specific to AI
 
@@ -51,4 +51,4 @@ Camera -> Vision -> AI model -> [ Translation engine ] -> Screen / Voice
 ## 6. Evidence
 
 Automated tests: `tests/test_prediction.py`, `tests/test_engine.py`,
-`tests/test_security.py`.
+`tests/test_security.py`, `tests/test_voice.py`.
