@@ -80,6 +80,32 @@ def test_invalid_model_output_counts_as_no_sign():
     assert pipeline.get_prediction(frame, -1) is None
 
 
+def test_word_outside_allowlist_counts_as_no_sign():
+    pipeline = RealPipeline(
+        FakeExtractor(),
+        FakePredictor(result=("HACKED", 0.99)),
+        Stabilizer(window=3, min_votes=2),
+        unmirror=mirror,
+        allowlist=frozenset({"HELLO", "YES"}),
+    )
+    frame = np.zeros((2, 2, 3))
+    assert pipeline.get_prediction(frame, -1) is None
+    assert pipeline.get_prediction(frame, -1) is None
+
+
+def test_word_in_allowlist_passes():
+    pipeline = RealPipeline(
+        FakeExtractor(),
+        FakePredictor(),
+        Stabilizer(window=3, min_votes=2),
+        unmirror=mirror,
+        allowlist=frozenset({"HELLO", "YES"}),
+    )
+    frame = np.zeros((2, 2, 3))
+    pipeline.get_prediction(frame, -1)
+    assert pipeline.get_prediction(frame, -1) == Prediction("HELLO", 0.9)
+
+
 def test_on_word_resets_model_and_votes():
     predictor = FakePredictor()
     pipeline = make_pipeline(predictor=predictor)

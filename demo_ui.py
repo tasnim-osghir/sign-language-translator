@@ -13,6 +13,7 @@ from demo import (
     DEFAULT_THRESHOLD,
     DEFAULT_WINDOW,
     NO_HAND_RESET_FRAMES,
+    allowed_only,
     hands_visible,
     to_prediction,
 )
@@ -27,13 +28,16 @@ class RealPipeline:
     ui.app.run() mirrors each frame before calling get_prediction();
     unmirror undoes it (a horizontal flip is its own inverse), so the
     extractor always gets the ORIGINAL camera frame.
+    allowlist: if given, a model word outside it counts as no sign, so it
+    is never voted on nor shown.
     """
 
-    def __init__(self, extractor, predictor, stabilizer, unmirror):
+    def __init__(self, extractor, predictor, stabilizer, unmirror, allowlist=None):
         self._extractor = extractor
         self._predictor = predictor
         self._stabilizer = stabilizer
         self._unmirror = unmirror
+        self._allowlist = allowlist
         self.frames = 0
         self.frames_without_hand = 0
 
@@ -44,6 +48,8 @@ class RealPipeline:
         left, right = hands_visible(points)
 
         prediction = to_prediction(self._predictor.predict(points.reshape(-1)))
+        if self._allowlist is not None:
+            prediction = allowed_only(prediction, self._allowlist)
         stable = self._stabilizer.update(prediction)
 
         if left or right:
@@ -77,15 +83,20 @@ def run_ui(camera_index: int, stabilizer: Stabilizer, engine: TranslationEngine)
 
     try:
         # Loads the model now (with its hash check), not at the first sign.
-        predictor.words()
+        # Only the model words are allowed to reach the engine.
+        engine.allowlist = predictor.words()
         extractor = LandmarkExtractor()
-    except (RuntimeError, FileNotFoundError) as error:
+    except (RuntimeError, FileNotFoundError, ValueError) as error:
         print(f"Cannot load the models: {error}")
         print(KEYBOARD_HINT)
         return 1
 
     pipeline = RealPipeline(
-        extractor, predictor, stabilizer, unmirror=lambda frame: cv2.flip(frame, 1)
+        extractor,
+        predictor,
+        stabilizer,
+        unmirror=lambda frame: cv2.flip(frame, 1),
+        allowlist=engine.allowlist,
     )
     try:
         predictor.reset()

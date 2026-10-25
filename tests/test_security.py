@@ -36,7 +36,6 @@ def test_garbage_input_is_refused_without_crashing():
     assert engine.sentence == ""
 
 
-@pytest.mark.xfail(reason="S2 allowlist not implemented yet")
 def test_unknown_sign_is_rejected_by_allowlist():
     """S2: a sign outside the official list must be refused."""
     engine = TranslationEngine()

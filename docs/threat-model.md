@@ -45,8 +45,6 @@ Camera -> Vision -> AI model -> [ Translation engine ] -> Screen / Voice
 
 ## 5. Known gaps (honest list)
 
-- **S2 (allowlist) not implemented yet:** the engine accepts any sign with a valid
-  format. Test `test_unknown_sign_is_rejected_by_allowlist` is marked xfail.
 - Stability vote and cooldown are not implemented yet (week 2).
 - No full penetration test (out of scope for this project).
 

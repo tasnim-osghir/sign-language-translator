@@ -9,7 +9,7 @@ Status values: **Done** (proven by a test or check), **Partly**, **To verify**
 | Rule | What is promised | Owner | How it is proven | Status |
 |---|---|---|---|---|
 | S1 | Invalid predictions are rejected (confidence outside 0 to 1, empty or malformed sign) | Member 3 | `tests/test_prediction.py`, `tests/test_engine.py`, `tests/test_security.py` (garbage input) | **Done** |
-| S2 | Only signs from the official list are accepted (allowlist) | Member 3, tests by Member 5 | `test_unknown_sign_is_rejected_by_allowlist` in `tests/test_security.py` (currently xfail) | **Not implemented** |
+| S2 | Only signs from the official list are accepted (allowlist) | Member 3, tests by Member 5 | `test_unknown_sign_is_rejected_by_allowlist` in `tests/test_security.py`, `tests/test_allowlist.py` | **Done** |
 | S3 | No image or video is recorded or sent; only landmarks are kept | Members 2, 4, 5 | Code review of `vision/`, dataset check, `data/README.md` policy | **To verify** (check `vision/record_videos.py`) |
 | S4 | Model file hash is recorded at export and checked at load | Members 1, 3 | Integration test (hash mismatch is refused) | **Not implemented** |
 | S5 | No system command is built from text | Member 3 | `test_injection_like_signs_are_rejected` (strict sign format), Bandit in CI, code review of `voice/` | **Partly** |
@@ -22,5 +22,6 @@ Status values: **Done** (proven by a test or check), **Partly**, **To verify**
 ## Notes
 
 - The tests are in the `tests/` folder and run with `pytest`.
-- S2 is the main known gap: the engine accepts any sign with a valid format.
+- S2: the engine only accepts signs from its allowlist (the model words in the
+  demos, HELLO/THANKS/YES in keyboard mode).
 - Statuses marked "To verify" must be checked before the final delivery.
