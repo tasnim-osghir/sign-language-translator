@@ -8,7 +8,7 @@ Keys in both modes: c = clear the sentence, q = quit.
 import argparse
 import sys
 
-from translation import Prediction, Stabilizer, TranslationEngine
+from translation import Prediction, Stabilizer, TranslationEngine, display_word
 
 WINDOW_NAME = "Sign Language Translator - Demo"
 
@@ -50,6 +50,16 @@ def to_prediction(result) -> Prediction | None:
         return None
 
 
+def allowed_only(prediction: Prediction | None, allowlist) -> Prediction | None:
+    """Return prediction if its sign is in allowlist, else None.
+
+    Unknown words become "no sign" before the vote, so they are never shown.
+    """
+    if prediction is None or prediction.sign not in allowlist:
+        return None
+    return prediction
+
+
 def hands_visible(points) -> tuple[bool, bool]:
     """Return (left, right): whether each hand has landmarks in a (67, 3) array.
 
@@ -74,7 +84,10 @@ def run_keyboard(camera_index: int = DEFAULT_CAMERA) -> None:
 
     from vision.camera import Camera
 
-    engine = TranslationEngine()
+    # Only the keyboard words (HELLO, THANKS, YES) are allowed.
+    engine = TranslationEngine(
+        allowlist={prediction.sign for prediction in _KEY_PREDICTIONS.values()}
+    )
     predictor = KeyboardPredictor()
     last_prediction = None
 
@@ -96,12 +109,12 @@ def run_keyboard(camera_index: int = DEFAULT_CAMERA) -> None:
 
                 prediction = predictor.predict(key)
                 engine.update(prediction)
-                if prediction is not None:
+                if prediction is not None and engine.allows(prediction.sign):
                     last_prediction = prediction
 
                 if last_prediction is not None:
                     top_text = (
-                        f"{last_prediction.sign} "
+                        f"{display_word(last_prediction.sign)} "
                         f"({last_prediction.confidence:.2f})"
                     )
                     _draw_text(cv2, frame, top_text, (10, 30), (0, 255, 0))
@@ -130,15 +143,18 @@ def run_real(
     from models import predictor
     from vision.camera import Camera
     from vision.landmarks import LandmarkExtractor
+    from voice import Speaker
 
     extractor = None
     camera = None
+    speaker = None
     try:
         try:
             # Loads the model now (with its hash check), not at the first sign.
-            predictor.words()
+            # Only the model words are allowed to reach the engine.
+            engine.allowlist = predictor.words()
             extractor = LandmarkExtractor()
-        except (RuntimeError, FileNotFoundError) as error:
+        except (RuntimeError, FileNotFoundError, ValueError) as error:
             print(f"Cannot load the models: {error}")
             print("Run with --keyboard to try the demo without the models.")
             return 1
@@ -150,6 +166,8 @@ def run_real(
             print(f"Camera error: {error}")
             return 1
 
+        # Speaks each new word in the background; never blocks this loop.
+        speaker = Speaker(engine)
         predictor.reset()
         frames_without_hand = 0
 
@@ -163,12 +181,15 @@ def run_real(
             points = extractor.extract(frame)
             left, right = hands_visible(points)
 
-            prediction = to_prediction(predictor.predict(points.reshape(-1)))
+            prediction = allowed_only(
+                to_prediction(predictor.predict(points.reshape(-1))), engine.allowlist
+            )
             stable = stabilizer.update(prediction)
             word = engine.update(stable)
             if word is not None:
                 predictor.reset()
                 stabilizer.reset()
+                speaker.speak(word)
 
             if left or right:
                 frames_without_hand = 0
@@ -180,7 +201,7 @@ def run_real(
 
             display = cv2.flip(frame, 1)
             if stable is not None:
-                top_text = f"{stable.sign} ({stable.confidence:.2f})"
+                top_text = f"{display_word(stable.sign)} ({stable.confidence:.2f})"
             else:
                 top_text = "..."
             _draw_text(cv2, display, top_text, (10, 30), (0, 255, 0))
@@ -205,6 +226,8 @@ def run_real(
         return 0
 
     finally:
+        if speaker is not None:
+            speaker.close()
         if camera is not None:
             camera.release()
         if extractor is not None:

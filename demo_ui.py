@@ -13,10 +13,12 @@ from demo import (
     DEFAULT_THRESHOLD,
     DEFAULT_WINDOW,
     NO_HAND_RESET_FRAMES,
+    allowed_only,
     hands_visible,
     to_prediction,
 )
 from translation import Stabilizer, TranslationEngine
+from voice import Speaker
 
 KEYBOARD_HINT = "Run 'python demo.py --keyboard' to try the demo without the models."
 
@@ -27,13 +29,19 @@ class RealPipeline:
     ui.app.run() mirrors each frame before calling get_prediction();
     unmirror undoes it (a horizontal flip is its own inverse), so the
     extractor always gets the ORIGINAL camera frame.
+    allowlist: if given, a model word outside it counts as no sign, so it
+    is never voted on nor shown.
+    speaker: if given, each validated word is spoken (see voice.Speaker).
     """
 
-    def __init__(self, extractor, predictor, stabilizer, unmirror):
+    def __init__(self, extractor, predictor, stabilizer, unmirror, allowlist=None,
+                 speaker=None):
         self._extractor = extractor
         self._predictor = predictor
         self._stabilizer = stabilizer
         self._unmirror = unmirror
+        self._allowlist = allowlist
+        self._speaker = speaker
         self.frames = 0
         self.frames_without_hand = 0
 
@@ -44,6 +52,8 @@ class RealPipeline:
         left, right = hands_visible(points)
 
         prediction = to_prediction(self._predictor.predict(points.reshape(-1)))
+        if self._allowlist is not None:
+            prediction = allowed_only(prediction, self._allowlist)
         stable = self._stabilizer.update(prediction)
 
         if left or right:
@@ -59,6 +69,9 @@ class RealPipeline:
         """A word was validated: the model and the votes restart."""
         self._predictor.reset()
         self._stabilizer.reset()
+        if self._speaker is not None:
+            # Speaks display_word(word); does nothing when the voice is off.
+            self._speaker.speak(word)
 
 
 def run_ui(camera_index: int, stabilizer: Stabilizer, engine: TranslationEngine) -> int:
@@ -77,15 +90,22 @@ def run_ui(camera_index: int, stabilizer: Stabilizer, engine: TranslationEngine)
 
     try:
         # Loads the model now (with its hash check), not at the first sign.
-        predictor.words()
+        # Only the model words are allowed to reach the engine.
+        engine.allowlist = predictor.words()
         extractor = LandmarkExtractor()
-    except (RuntimeError, FileNotFoundError) as error:
+    except (RuntimeError, FileNotFoundError, ValueError) as error:
         print(f"Cannot load the models: {error}")
         print(KEYBOARD_HINT)
         return 1
 
+    speaker = Speaker(engine)
     pipeline = RealPipeline(
-        extractor, predictor, stabilizer, unmirror=lambda frame: cv2.flip(frame, 1)
+        extractor,
+        predictor,
+        stabilizer,
+        unmirror=lambda frame: cv2.flip(frame, 1),
+        allowlist=engine.allowlist,
+        speaker=speaker,
     )
     try:
         predictor.reset()
@@ -96,6 +116,7 @@ def run_ui(camera_index: int, stabilizer: Stabilizer, engine: TranslationEngine)
             on_word=pipeline.on_word,
         )
     finally:
+        speaker.close()
         extractor.close()
 
     # ui.app.run() prints camera errors itself but does not report them:

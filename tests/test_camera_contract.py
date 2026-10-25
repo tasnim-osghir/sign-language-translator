@@ -68,6 +68,21 @@ class FakePredictor:
         return None
 
 
+class FakeSpeaker:
+    """Stands in for voice.Speaker: no pyttsx3, no audio device, prints nothing."""
+
+    def __init__(self):
+        self.words = []
+        self.closed = False
+
+    def speak(self, word):
+        self.words.append(word)
+        return True
+
+    def close(self):
+        self.closed = True
+
+
 @pytest.fixture
 def shown(monkeypatch):
     """Stub the OpenCV window calls; returns the list of images shown."""
@@ -105,6 +120,9 @@ def test_real_mode_shows_frame_then_stops(monkeypatch, capsys, shown, failed_rea
     models = types.ModuleType("models")
     models.predictor = FakePredictor()
     monkeypatch.setitem(sys.modules, "models", models)
+    # run_real() does "from voice import Speaker" at call time.
+    speaker = FakeSpeaker()
+    monkeypatch.setattr("voice.Speaker", lambda engine: speaker)
 
     code = demo.run_real(0, Stabilizer(window=3, min_votes=2), TranslationEngine())
 
@@ -116,6 +134,7 @@ def test_real_mode_shows_frame_then_stops(monkeypatch, capsys, shown, failed_rea
     assert capsys.readouterr().out == "Failed to capture frame.\n"
     assert camera.released
     assert extractor.closed
+    assert speaker.closed
 
 
 @pytest.mark.parametrize("failed_read", FAILED_READS)
