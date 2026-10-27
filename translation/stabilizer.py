@@ -1,8 +1,8 @@
-"""Stabilisation des predictions : vote majoritaire sur les N dernieres images.
+"""Prediction stabilization: majority vote over the last N frames.
 
-Le modele predit image par image et peut hesiter. Le Stabilizer ne renvoie un
-signe que s'il est majoritaire et vu au moins min_votes fois dans la fenetre.
-Les predictions sous min_confidence comptent comme "pas de signe".
+The model predicts frame by frame and can hesitate. The Stabilizer only returns
+a sign if it has the most votes and was seen at least min_votes times in the window.
+Predictions below min_confidence count as "no sign".
 """
 import numbers
 from collections import deque
@@ -23,22 +23,22 @@ class Stabilizer:
             min_confidence, numbers.Real
         ):
             raise TypeError("min_confidence must be a real number")
-        # Ecrit ainsi, le test rejette aussi NaN.
+        # Written this way, the check also rejects NaN.
         if not 0.0 <= min_confidence <= 1.0:
             raise ValueError("min_confidence must be in [0, 1]")
 
         self.window = window
         self.min_votes = min_votes
         self.min_confidence = float(min_confidence)
-        # Une entree par image : la Prediction, ou None si rien n'a ete predit.
+        # One entry per frame: the Prediction, or None if nothing was predicted.
         self._entries = deque(maxlen=window)
 
     def update(self, prediction: Prediction | None) -> Prediction | None:
-        """Ajoute une prediction a la fenetre. Renvoie le signe stable, ou None.
+        """Add a prediction to the window. Return the stable sign, or None.
 
-        Une prediction sous min_confidence est ajoutee comme None (pas de
-        signe). Le signe stable est celui qui a le plus de votes (en cas
-        d'egalite, le plus recent) ; sa confiance est la moyenne de ses entrees.
+        A prediction below min_confidence is added as None (no sign).
+        The stable sign is the one with the most votes (on a tie, the most
+        recent); its confidence is the mean of its entries.
         """
         if prediction is not None and not isinstance(prediction, Prediction):
             raise TypeError("update() expects a Prediction or None")
@@ -63,5 +63,5 @@ class Stabilizer:
         return Prediction(sign, sum(votes) / len(votes))
 
     def reset(self) -> None:
-        """Vide la fenetre."""
+        """Empty the window."""
         self._entries.clear()

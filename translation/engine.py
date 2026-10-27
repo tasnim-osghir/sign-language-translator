@@ -1,7 +1,7 @@
-"""Moteur de traduction : transforme les predictions brutes en mots et en phrase.
+"""Translation engine: turns raw predictions into words and a sentence.
 
-Le vote sur N images est fait en amont par Stabilizer (translation/stabilizer.py) ;
-le moteur ne garde que le seuil de confiance, l'allowlist et l'anti-doublon.
+Voting over N frames is done upstream by Stabilizer (translation/stabilizer.py);
+the engine only applies the confidence threshold, the allowlist and de-duplication.
 """
 import numbers
 from collections import deque
@@ -9,18 +9,18 @@ from collections import deque
 from .lexicon import display_word
 from .prediction import _SIGN_ID, Prediction
 
-# Memoire bornee : la phrase ne peut jamais grossir sans limite.
+# Bounded memory: the sentence can never grow without limit.
 MAX_WORDS = 50
 
-# Liste officielle par defaut (S2) : les 8 mots du modele et THANKS (clavier).
-# Les demos la remplacent par la liste exacte de leur predicteur.
+# Default official list (S2): the model's 8 words plus THANKS (keyboard).
+# The demos replace it with the exact list of their predictor.
 DEFAULT_ALLOWLIST = frozenset(
     {"HELLO", "YES", "YOURSELF", "DAD", "WAIT", "WATER", "HOME", "SICK", "THANKS"}
 )
 
 
 def _validate_allowlist(allowlist) -> frozenset[str]:
-    """Verifie l'allowlist et la renvoie figee (frozenset)."""
+    """Check the allowlist and return it frozen (frozenset)."""
     if not isinstance(allowlist, (set, frozenset, list, tuple)):
         raise TypeError("allowlist must be a set, frozenset, list or tuple of str")
     for sign in allowlist:
@@ -46,10 +46,10 @@ class TranslationEngine:
         self._voice_enabled = True
 
     def update(self, prediction: Prediction | None) -> str | None:
-        """Traite une prediction. Renvoie le mot valide, ou None.
+        """Process a prediction. Return the accepted word, or None.
 
-        Un signe hors de l'allowlist est ignore : jamais affiche, prononce
-        ni stocke.
+        A sign outside the allowlist is ignored: never displayed, spoken
+        or stored.
         """
         if prediction is None:
             return None
@@ -70,23 +70,23 @@ class TranslationEngine:
 
     @allowlist.setter
     def allowlist(self, value) -> None:
-        """Remplace la liste (ex. par les mots du modele, une fois charge)."""
+        """Replace the list (e.g. with the model's words, once it is loaded)."""
         self._allowlist = _validate_allowlist(value)
 
     def allows(self, sign: str) -> bool:
-        """True si sign fait partie de l'allowlist."""
+        """True if sign is in the allowlist."""
         if not isinstance(sign, str):
             raise TypeError(f"sign must be a str, got {type(sign).__name__}")
         return sign in self._allowlist
 
     @property
     def words(self) -> tuple[str, ...]:
-        """Identifiants bruts des mots valides."""
+        """Raw ids of the accepted words."""
         return tuple(self._words)
 
     @property
     def sentence(self) -> str:
-        """Phrase a afficher (avec le lexique d'affichage)."""
+        """Sentence to display (using the display lexicon)."""
         return " ".join(display_word(word) for word in self._words)
 
     @property
@@ -100,13 +100,13 @@ class TranslationEngine:
         self._voice_enabled = value
 
     def clear(self) -> None:
-        """Bouton Clear : efface la phrase."""
+        """Clear button: erase the sentence."""
         self._words.clear()
 
     def reset(self) -> None:
-        """Bouton Reset : efface la phrase et l'etat interne.
+        """Reset button: erase the sentence and the internal state.
 
-        N'affecte pas voice_enabled : c'est un reglage de l'utilisateur.
-        Plus tard, reset() videra aussi le buffer de stabilisation.
+        Does not affect voice_enabled: that is a user setting.
+        Later, reset() will also empty the stabilization buffer.
         """
         self.clear()
