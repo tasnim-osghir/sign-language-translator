@@ -54,11 +54,34 @@ def predict_all(model, X):
     return logits.argmax(1).numpy()
 
 
+def report(model, Xt, y, test, words, name):
+    pred = predict_all(model, Xt[test])
+    print("TEST accuracy:", round(accuracy_score(y[test], pred) * 100, 1), "%")
+    print("TEST macro F1:", round(f1_score(y[test], pred, average="macro") * 100, 1), "%")
+    cm = confusion_matrix(y[test], pred, labels=range(len(words)))
+    per_word = cm.diagonal() / np.maximum(cm.sum(axis=1), 1)
+    print("accuracy per word (best first):")
+    for k in np.argsort(-per_word):
+        off = cm[k].copy()
+        off[k] = 0
+        confused = words[int(off.argmax())] if off.sum() else "-"
+        print(f"  {words[k]:<10} {per_word[k] * 100:5.1f}%  confused with: {confused}")
+    fig, ax = plt.subplots(figsize=(12, 12))
+    ax.imshow(cm / np.maximum(cm.sum(axis=1, keepdims=True), 1), cmap="Blues")
+    ax.set_xticks(range(len(words)), words, rotation=90)
+    ax.set_yticks(range(len(words)), words)
+    ax.set_xlabel("predicted")
+    ax.set_ylabel("true")
+    fig.tight_layout()
+    fig.savefig(DATA_DIR / f"confusion_{name}.png", dpi=120)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default="gru40")
     parser.add_argument("--words", nargs="*")
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--all-people", action="store_true")
     args = parser.parse_args()
     torch.manual_seed(SEED)
 
@@ -81,16 +104,21 @@ def main():
     y = np.searchsorted(classes, y)
     print("words:", len(words), "examples:", len(y))
 
-    people = np.unique(groups)
-    rng = np.random.default_rng(SEED)
-    test_people = rng.choice(people, size=N_TEST_PEOPLE, replace=False)
-    rest = np.setdiff1d(people, test_people)
-    val_people = rng.choice(rest, size=N_VAL_PEOPLE, replace=False)
-    test = np.isin(groups, test_people)
-    val = np.isin(groups, val_people)
-    train = ~test & ~val
-    print("test people:", sorted(test_people.tolist()))
-    print("validation people:", sorted(val_people.tolist()))
+    if args.all_people:
+        train = np.ones(len(y), dtype=bool)
+        test = val = np.zeros(len(y), dtype=bool)
+        print("training on ALL", len(np.unique(groups)), "people, no test set")
+    else:
+        people = np.unique(groups)
+        rng = np.random.default_rng(SEED)
+        test_people = rng.choice(people, size=N_TEST_PEOPLE, replace=False)
+        rest = np.setdiff1d(people, test_people)
+        val_people = rng.choice(rest, size=N_VAL_PEOPLE, replace=False)
+        test = np.isin(groups, test_people)
+        val = np.isin(groups, val_people)
+        train = ~test & ~val
+        print("test people:", sorted(test_people.tolist()))
+        print("validation people:", sorted(val_people.tolist()))
     print("train / val / test examples:", int(train.sum()), int(val.sum()), int(test.sum()))
 
     Xt = torch.from_numpy(X).float()
@@ -119,40 +147,21 @@ def main():
             opt.step()
             total += loss.item() * len(idx)
         sched.step()
-        val_acc = accuracy_score(y[val], predict_all(model, Xt[val]))
         minutes = (time.time() - started) / 60
-        print(
-            f"epoch {epoch:2d}  loss {total / len(Xtr):.3f}  "
-            f"val accuracy {val_acc * 100:.1f}%  ({minutes:.1f} min)"
-        )
+        line = f"epoch {epoch:2d}  loss {total / len(Xtr):.3f}"
+        if args.all_people:
+            print(f"{line}  ({minutes:.1f} min)")
+            continue
+        val_acc = accuracy_score(y[val], predict_all(model, Xt[val]))
+        print(f"{line}  val accuracy {val_acc * 100:.1f}%  ({minutes:.1f} min)")
         if val_acc > best_acc:
             best_acc = val_acc
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
 
-    model.load_state_dict(best_state)
-    print(f"best val accuracy {best_acc * 100:.1f}%")
-
-    pred = predict_all(model, Xt[test])
-    print("TEST accuracy:", round(accuracy_score(y[test], pred) * 100, 1), "%")
-    print("TEST macro F1:", round(f1_score(y[test], pred, average="macro") * 100, 1), "%")
-
-    cm = confusion_matrix(y[test], pred, labels=range(len(words)))
-    per_word = cm.diagonal() / np.maximum(cm.sum(axis=1), 1)
-    print("accuracy per word (best first):")
-    for k in np.argsort(-per_word):
-        off = cm[k].copy()
-        off[k] = 0
-        confused = words[int(off.argmax())] if off.sum() else "-"
-        print(f"  {words[k]:<10} {per_word[k] * 100:5.1f}%  confused with: {confused}")
-
-    fig, ax = plt.subplots(figsize=(12, 12))
-    ax.imshow(cm / np.maximum(cm.sum(axis=1, keepdims=True), 1), cmap="Blues")
-    ax.set_xticks(range(len(words)), words, rotation=90)
-    ax.set_yticks(range(len(words)), words)
-    ax.set_xlabel("predicted")
-    ax.set_ylabel("true")
-    fig.tight_layout()
-    fig.savefig(DATA_DIR / f"confusion_{args.name}.png", dpi=120)
+    if not args.all_people:
+        model.load_state_dict(best_state)
+        print(f"best val accuracy {best_acc * 100:.1f}%")
+        report(model, Xt, y, test, words, args.name)
 
     checkpoint = {
         "state_dict": model.state_dict(),
