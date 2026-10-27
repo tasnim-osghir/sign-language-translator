@@ -1,33 +1,27 @@
 # Security Requirements Traceability (S1 to S10)
 
-Owner: Member 5. Update this table every week.
-Last updated: October 2026 (week 1)
+Owner: Member 5. Last updated: October 2026.
 
-Status values: **Done** (proven by a test or check), **Partly**, **To verify**
-(needs a check we have not done yet), **Not implemented**.
+Status values: **Done** (proven by a test or check), **Partly**, **To verify**,
+**Not implemented**.
 
-| Rule | What is promised | Owner | How it is proven | Status |
-|---|---|---|---|---|
-| S1 | Invalid predictions are rejected (confidence outside 0 to 1, empty or malformed sign) | Member 3 | `tests/test_prediction.py`, `tests/test_engine.py`, `tests/test_security.py` (garbage input) | **Done** |
-| S2 | Only signs from the official list are accepted (allowlist) | Member 3, tests by Member 5 | `test_unknown_sign_is_rejected_by_allowlist` in `tests/test_security.py`, `tests/test_allowlist.py` | **Done** |
-| S3 | No image or video is recorded or sent; only landmarks are kept | Members 2, 4, 5 | Code review of `vision/`, dataset check, `data/README.md` policy | **To verify** (check `vision/record_videos.py`) |
-| S4 | Model file hash is recorded at export and checked at load | Members 1, 3 | Integration test (hash mismatch is refused) | **Not implemented** |
-| S5 | No system command is built from text | Member 3 | `test_injection_like_signs_are_rejected` (strict sign format); `tests/test_voice.py`: injection-like text refused, only allowlisted words spoken, no shell in `voice/` (`test_voice_code_uses_no_shell`); Bandit in CI still to add | **Partly** (voice done, Bandit to add) |
-| S6 | Dependencies are pinned and free of known serious vulnerabilities | Member 3 | pip-audit in CI, Dependabot | **To verify** (check `.github/`) |
-| S7 | No secret or personal data in the repository | Everyone | Secret detection (pre-commit and CI), `.gitignore` | **To verify** |
-| S8 | Logs contain no images or raw landmarks | Everyone | Code review | **To verify** |
-| S9 | Errors (camera, model, voice) are handled without a crash or technical details on screen | Members 2, 3, 4 | `test_burst_of_predictions_is_fast_and_bounded`, bounded memory test; integration tests still needed | **Partly** |
-| S10 | A consent message is shown at startup | Member 4 | Interface review | **Not implemented** (`ui/` is empty) |
+| Rule | What is promised | How it is proven | Status |
+|---|---|---|---|
+| S1 | Invalid predictions are rejected | `test_prediction.py`, `test_engine.py`, `test_security.py` | **Done** |
+| S2 | Only signs from the allowlist are accepted | `test_allowlist.py` (36 tests: unknown words rejected, list frozen, lexicon cannot bypass it) | **Done** (engine level) |
+| S3 | No image or video recorded or sent | The live app stores nothing. `record_videos.py` saves clips locally; `*.mp4` is blocked by `.gitignore` (rule line 229). Signer consent and deletion of clips still to confirm | **Partly** |
+| S4 | Model hash verified before loading | `models/predictor.py` `_load()` raises an error on mismatch; `test_model_integrity.py` | **Done** |
+| S5 | No system command built from text | No `subprocess` / `os.system` / `shell=True` in project code; `test_voice.py` forbids them; injection-like signs rejected in `test_security.py` | **Done** |
+| S6 | Dependencies pinned and free of known vulnerabilities | `requirements.txt` fixed (joblib typo). `pip-audit` is not in the CI | **Not implemented** |
+| S7 | No secret or personal data in the repository | `.gitignore` in place. No secret scanner in the CI | **To verify** |
+| S8 | Logs contain no images or raw landmarks | Code review needed | **To verify** |
+| S9 | Errors handled without crash | Bounded memory and 50,000-prediction burst test. Camera and model failure handling not fully verified | **Partly** |
+| S10 | Consent message at startup | No consent text found in `ui/`, `demo.py`, `demo_ui.py` | **Not implemented** |
 
-## Notes
+## Residual risks
 
-- The tests are in the `tests/` folder and run with `pytest`.
-- S2: the engine only accepts signs from its allowlist (the model words in the
-  demos, HELLO/THANKS/YES in keyboard mode).
-- S5 / S9 (voice): `voice/` uses pyttsx3 directly, with no shell and no
-  system command. It speaks only allowlisted words, after `display_word`,
-  and only text of at most 64 letters, digits, spaces, "/" or "-". Speech
-  runs in one background thread with a bounded queue (5 words, the oldest
-  is dropped), so it never blocks the camera. If pyttsx3 or the audio
-  device is missing, one warning is printed and the demo goes on silently.
-- Statuses marked "To verify" must be checked before the final delivery.
+- Model hash check: the file is read twice (hash, then load), and the expected hash
+  is stored in the repo next to the code. It protects against a swapped model file,
+  not against someone who can change both.
+- The CI runs ruff and pytest only (no Bandit, pip-audit or secret scan).
+- No full penetration test.
