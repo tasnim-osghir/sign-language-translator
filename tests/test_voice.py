@@ -199,6 +199,143 @@ def test_pyttsx3_backend_uses_a_new_engine_for_each_word(monkeypatch):
     ]
 
 
+FRENCH = types.SimpleNamespace(
+    id=r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens"
+       r"\TTS_MS_FR-FR_HORTENSE_11.0",
+    name="Microsoft Hortense Desktop - French", languages=["fr-FR"],
+)
+ENGLISH_US = types.SimpleNamespace(
+    id="english-us-id", name="Some Voice", languages=["en-US"],
+)
+ENGLISH_GB = types.SimpleNamespace(
+    id="english-gb-id", name="Other Voice", languages=["en-GB"],
+)
+
+
+def make_voice_backend(monkeypatch, voices=(), get_error=None, set_error=None):
+    """Pyttsx3Backend over a fake pyttsx3 engine (no audio, no pyttsx3)."""
+    engines = []
+
+    class FakeEngine:
+        def __init__(self):
+            self.voice = "default"
+            self.spoken = []
+            engines.append(self)
+
+        def getProperty(self, name):
+            if get_error is not None:
+                raise get_error
+            assert name == "voices"
+            return voices
+
+        def setProperty(self, name, value):
+            if set_error is not None:
+                raise set_error
+            assert name == "voice"
+            self.voice = value
+
+        def say(self, text):
+            self.spoken.append(text)
+
+        def runAndWait(self):
+            pass
+
+        def stop(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "pyttsx3",
+                        types.SimpleNamespace(Engine=FakeEngine))
+    monkeypatch.setitem(sys.modules, "pythoncom", None)
+    return Pyttsx3Backend(), engines
+
+
+def test_english_voice_is_chosen_among_several(monkeypatch, capsys):
+    backend, engines = make_voice_backend(
+        monkeypatch, voices=[FRENCH, ENGLISH_US, ENGLISH_GB])
+    backend.say("hello")
+    backend.say("yes")
+    backend.close()
+    # Set on the fresh engine of each word.
+    assert [engine.voice for engine in engines] == ["english-us-id"] * 2
+    assert [engine.spoken for engine in engines] == [["hello"], ["yes"]]
+    assert "No English voice found" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "languages",
+    [["en-US"], ["en_GB"], [b"\x05en-us"], [b"en"], "en-US", b"\x05en-gb",
+     ["fr-FR", "en-US"]],
+)
+def test_english_voice_from_str_or_bytes_languages(monkeypatch, languages):
+    voice = types.SimpleNamespace(id="voice-id", name="Voice",
+                                  languages=languages)
+    backend, engines = make_voice_backend(monkeypatch, voices=[FRENCH, voice])
+    backend.say("hello")
+    assert engines[0].voice == "voice-id"
+
+
+@pytest.mark.parametrize(
+    "voice_id, name",
+    [(r"Tokens\TTS_MS_EN-US_ZIRA_11.0", "Zira"),
+     (r"Tokens\TTS_MS_EN-GB_HAZEL_11.0", "Hazel"),
+     ("id-1", "Microsoft David Desktop"),
+     ("id-2", "Microsoft Mark"),
+     ("id-3", "Microsoft Zira Desktop"),
+     ("id-4", "Microsoft Hazel Desktop - English (Great Britain)")],
+)
+def test_english_voice_from_id_or_name(monkeypatch, voice_id, name):
+    # SAPI5 often gives no languages at all.
+    voice = types.SimpleNamespace(id=voice_id, name=name, languages=[])
+    backend, engines = make_voice_backend(monkeypatch, voices=[FRENCH, voice])
+    backend.say("hello")
+    assert engines[0].voice == voice_id
+
+
+@pytest.mark.parametrize(
+    "languages", [[], None, "", b"", [b"\x05fr"], ["fr-FR"], [None, 3], 42],
+)
+def test_non_english_languages_are_not_chosen(monkeypatch, languages):
+    voice = types.SimpleNamespace(id="voice-id", name="Hortense",
+                                  languages=languages)
+    backend, engines = make_voice_backend(monkeypatch, voices=[voice])
+    backend.say("hello")
+    assert engines[0].voice == "default"
+    assert engines[0].spoken == ["hello"]
+
+
+def test_no_english_voice_keeps_default_and_warns_once(monkeypatch, capsys):
+    backend, engines = make_voice_backend(monkeypatch, voices=[FRENCH])
+    for word in ("hello", "yes", "thank you"):
+        backend.say(word)
+    backend.close()
+    assert [engine.voice for engine in engines] == ["default"] * 3
+    assert [engine.spoken for engine in engines] == [
+        ["hello"], ["yes"], ["thank you"]]
+    out = capsys.readouterr().out
+    assert out.count(
+        "No English voice found, using the default voice. "
+        "Install one in Windows Settings (Speech)."
+    ) == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"voices": []},
+     {"voices": None},
+     {"voices": [types.SimpleNamespace()]},  # no id, name or languages
+     {"get_error": RuntimeError("no voices")},
+     {"voices": [ENGLISH_US], "set_error": RuntimeError("bad voice")}],
+)
+def test_voice_selection_problems_never_crash(monkeypatch, capsys, kwargs):
+    backend, engines = make_voice_backend(monkeypatch, **kwargs)
+    backend.say("hello")
+    backend.say("yes")
+    backend.close()
+    # The words are still spoken with the default voice.
+    assert [engine.spoken for engine in engines] == [["hello"], ["yes"]]
+    assert capsys.readouterr().out.count("No English voice found") == 1
+
+
 def test_backend_creation_failure_does_not_crash(capsys):
     def broken_factory():
         raise OSError("no audio device")
