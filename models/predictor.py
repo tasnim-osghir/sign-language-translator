@@ -12,6 +12,7 @@ import onnxruntime as ort
 N_POINTS = 67
 N_FRAMES = 32
 MIN_HAND_FRAMES = 3
+LIVE_MIN_HAND_FRAMES = 12
 WINDOW = 30
 LEFT = slice(0, 21)
 RIGHT = slice(21, 42)
@@ -114,6 +115,12 @@ def _probabilities(feats):
     return bundle["model"].predict_proba(feats.reshape(1, -1))[0]
 
 
+def _hand_frames(seq):
+    left = np.sum(~np.isnan(seq[:, LEFT][:, 0, 0]))
+    right = np.sum(~np.isnan(seq[:, RIGHT][:, 0, 0]))
+    return int(max(left, right))
+
+
 def predict(features):
     frame = _to_frame(features)
     _buffer.append(frame)
@@ -121,7 +128,10 @@ def predict(features):
     no_right = np.isnan(frame[RIGHT, 0]).all()
     if no_left and no_right:
         return None
-    feats = sequence_features(np.stack(_buffer))
+    seq = np.stack(_buffer)
+    if _hand_frames(seq) < LIVE_MIN_HAND_FRAMES:
+        return None
+    feats = sequence_features(seq)
     if feats is None:
         return None
     probs = _probabilities(feats)
