@@ -42,7 +42,7 @@ def points_with(left=False, right=False):
         points[0:21] = 0.5
     if right:
         points[21:42] = 0.5
-    # La pose ne compte pas comme une main.
+    # The pose does not count as a hand.
     points[42:67] = 0.5
     return points
 

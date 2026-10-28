@@ -86,11 +86,8 @@ def test_voice_enabled_can_be_toggled():
         {"threshold": 1.5},
         {"threshold": -0.1},
         {"threshold": float("nan")},
-        {"window": 0},
-        {"min_votes": 0},
-        {"window": 5, "min_votes": 6},
-        {"cooldown_s": -1},
-        {"cooldown_s": float("nan")},
+        {"allowlist": set()},
+        {"allowlist": {"hello"}},
     ],
 )
 def test_invalid_parameter_values_are_rejected(kwargs):
@@ -103,13 +100,22 @@ def test_invalid_parameter_values_are_rejected(kwargs):
     [
         {"threshold": "0.8"},
         {"threshold": True},
-        {"window": 1.5},
-        {"window": True},
-        {"min_votes": "7"},
-        {"cooldown_s": None},
+        {"threshold": None},
+        {"allowlist": "HELLO"},
+        {"allowlist": {1}},
     ],
 )
 def test_invalid_parameter_types_are_rejected(kwargs):
+    with pytest.raises(TypeError):
+        TranslationEngine(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"window": 10}, {"min_votes": 7}, {"cooldown_s": 1.5}],
+)
+def test_removed_voting_parameters_are_rejected(kwargs):
+    # The vote is done by Stabilizer now: the engine no longer accepts these.
     with pytest.raises(TypeError):
         TranslationEngine(**kwargs)
 
