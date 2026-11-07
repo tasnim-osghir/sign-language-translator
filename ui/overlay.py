@@ -240,4 +240,40 @@ def draw_footer(canvas, n_words, voice_on):
     put(canvas, f"WORDS  {n_words}", (650, 548), 0.5, DIM)
     text, color = ("VOICE ON", GREEN) if voice_on else ("VOICE OFF", RED)
     put_right(canvas, text, 1050, 548, 0.5, color)
-    
+HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    (0, 5), (5, 6), (6, 7), (7, 8),
+    (5, 9), (9, 10), (10, 11), (11, 12),
+    (9, 13), (13, 14), (14, 15), (15, 16),
+    (13, 17), (17, 18), (18, 19), (19, 20),
+    (0, 17),
+)
+
+
+def draw_hand_landmarks(frame, points, mirrored=True):
+    """Draw the hand points and bones on a camera frame.
+
+    points: the (67, 3) array of the vision module (x, y in 0..1, NaN when a
+    hand is missing), computed on the ORIGINAL frame. mirrored=True because
+    the UI frame is a mirrored copy. Returns True if a hand was drawn.
+    """
+    if points is None:
+        return False
+    points = np.asarray(points)
+    if points.ndim != 2 or points.shape[0] < 42:
+        return False
+    height, width = frame.shape[:2]
+    drawn = False
+    for start in (0, 21):
+        hand = points[start:start + 21]
+        if np.isnan(hand).any():
+            continue
+        xs = 1.0 - hand[:, 0] if mirrored else hand[:, 0]
+        pts = [(int(x * width), int(y * height)) for x, y in zip(xs, hand[:, 1])]
+        for a, b in HAND_CONNECTIONS:
+            cv2.line(frame, pts[a], pts[b], CYAN, 2, cv2.LINE_AA)
+        for p in pts:
+            cv2.circle(frame, p, 4, WHITE, -1, cv2.LINE_AA)
+            cv2.circle(frame, p, 4, CYAN, 1, cv2.LINE_AA)
+        drawn = True
+    return drawn

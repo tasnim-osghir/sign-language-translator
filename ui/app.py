@@ -23,6 +23,7 @@ from .overlay import (
     draw_confidence,
     draw_footer,
     draw_fps,
+    draw_hand_landmarks,
     draw_sentence,
     draw_sign_chip,
     draw_status,
@@ -46,11 +47,13 @@ def keyboard_predictor(frame, key):
 
 
 def run(camera_index: int = 0, get_prediction=keyboard_predictor,
-        engine=None, on_word=None) -> None:
+        engine=None, on_word=None, get_landmarks=None) -> None:
     """Open the window.
 
     engine: an existing TranslationEngine (created here if None).
     on_word: called with each newly validated word (e.g. by the voice module).
+    get_landmarks: optional, returns the (67, 3) landmark array of the last
+        frame (or None). Used to draw the hand points on the camera card.
     """
     if engine is None:
         engine = TranslationEngine()
@@ -132,8 +135,14 @@ def run(camera_index: int = 0, get_prediction=keyboard_predictor,
                     instant = 1.0 / dt
                     fps = instant if fps == 0 else 0.9 * fps + 0.1 * instant
 
+                hand_found = True
+                if get_landmarks is not None:
+                    hand_found = draw_hand_landmarks(frame, get_landmarks())
+
                 if state["paused"]:
                     status, color = "PAUSED", ORANGE
+                elif not hand_found:
+                    status, color = "NO HAND DETECTED", ORANGE
                 elif now - state["last_time"] < RECENT_SECONDS:
                     status, color = "TRANSLATING...", CYAN
                 else:
