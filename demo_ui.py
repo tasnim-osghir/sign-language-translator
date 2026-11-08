@@ -44,11 +44,13 @@ class RealPipeline:
         self._speaker = speaker
         self.frames = 0
         self.frames_without_hand = 0
+        self.last_points = None
 
     def get_prediction(self, frame, key):
         """Return the stable Prediction for this frame, or None. key is unused."""
         self.frames += 1
         points = self._extractor.extract(self._unmirror(frame))
+        self.last_points = points
         left, right = hands_visible(points)
 
         prediction = to_prediction(self._predictor.predict(points.reshape(-1)))
@@ -114,6 +116,7 @@ def run_ui(camera_index: int, stabilizer: Stabilizer, engine: TranslationEngine)
             get_prediction=pipeline.get_prediction,
             engine=engine,
             on_word=pipeline.on_word,
+            get_landmarks=lambda: pipeline.last_points,
         )
     finally:
         speaker.close()

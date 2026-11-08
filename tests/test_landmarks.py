@@ -87,6 +87,6 @@ def test_swap_hands_is_off_by_default():
 
 
 def test_extractor_missing_model_raises(tmp_path):
-    # Leve avant tout import de mediapipe : fonctionne sans mediapipe.
+    # Raised before any mediapipe import: works without mediapipe.
     with pytest.raises(FileNotFoundError, match="not found"):
         landmarks.LandmarkExtractor(tmp_path / "missing.task")

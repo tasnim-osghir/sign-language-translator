@@ -1,7 +1,7 @@
-"""Lexique d'affichage : transforme un identifiant de signe en texte lisible.
+"""Display lexicon: turns a sign id into readable text.
 
-Affichage seulement : il s'applique apres l'allowlist, sur des mots deja
-valides. Un mot absent du lexique est affiche tel quel.
+Display only: it is applied after the allowlist, on words that are already
+accepted. A word missing from the lexicon is shown as is.
 """
 
 DISPLAY_LEXICON = {
@@ -13,7 +13,7 @@ DISPLAY_LEXICON = {
 
 
 def display_word(sign: str) -> str:
-    """Renvoie le texte a afficher pour un identifiant de signe."""
+    """Return the text to display for a sign id."""
     if not isinstance(sign, str):
         raise TypeError(f"sign must be a str, got {type(sign).__name__}")
     return DISPLAY_LEXICON.get(sign, sign)

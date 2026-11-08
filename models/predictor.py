@@ -1,21 +1,25 @@
 import hashlib
+import io
+import json
 import os
 from collections import deque
 from pathlib import Path
 
 import joblib
 import numpy as np
+import onnxruntime as ort
 
 N_POINTS = 67
 N_FRAMES = 32
 MIN_HAND_FRAMES = 3
+LIVE_MIN_HAND_FRAMES = 12
 WINDOW = 30
 LEFT = slice(0, 21)
 RIGHT = slice(21, 42)
 NOSE = 42
 L_SHOULDER = 42 + 11
 R_SHOULDER = 42 + 12
-DEFAULT_MODEL = Path.home() / "Projects" / "asl-data" / "rf_demo.joblib"
+DEFAULT_MODEL = Path.home() / "Projects" / "asl-data" / "gru40.onnx"
 MODEL_PATH = Path(os.environ.get("SIGN_MODEL_PATH", DEFAULT_MODEL))
 
 _buffer = deque(maxlen=WINDOW)
@@ -56,19 +60,37 @@ def sequence_features(seq):
 def _load():
     global _bundle
     if _bundle is None:
-        hash_path = Path(__file__).with_name(MODEL_PATH.stem + ".sha256")
-        expected = hash_path.read_text().strip()
-        actual = hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()
-        if actual != expected:
+        expected = MODEL_PATH.with_suffix("").name + ".sha256"
+        expected = Path(__file__).with_name(expected).read_text().strip()
+        data = MODEL_PATH.read_bytes()
+        if hashlib.sha256(data).hexdigest() != expected:
             raise RuntimeError(f"model hash mismatch for {MODEL_PATH.name}")
-        _bundle = joblib.load(MODEL_PATH)
-        _bundle["model"].n_jobs = 1
+        if MODEL_PATH.suffix == ".onnx":
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = 1
+            session = ort.InferenceSession(
+                data, sess_options=options, providers=["CPUExecutionProvider"]
+            )
+            words_file = Path(__file__).with_name(MODEL_PATH.stem + ".words.json")
+            _bundle = {
+                "kind": "onnx",
+                "session": session,
+                "words": json.loads(words_file.read_text()),
+            }
+        else:
+            loaded = joblib.load(io.BytesIO(data))
+            model = loaded["model"]
+            model.n_jobs = 1
+            _bundle = {
+                "kind": "rf",
+                "model": model,
+                "words": [loaded["words"][int(c)] for c in model.classes_],
+            }
     return _bundle
 
 
 def words():
-    bundle = _load()
-    return [bundle["words"][int(c)] for c in bundle["model"].classes_]
+    return list(_load()["words"])
 
 
 def reset():
@@ -86,6 +108,19 @@ def _to_frame(features):
     return frame
 
 
+def _probabilities(feats):
+    bundle = _load()
+    if bundle["kind"] == "onnx":
+        return bundle["session"].run(None, {"x": feats[None]})[0][0]
+    return bundle["model"].predict_proba(feats.reshape(1, -1))[0]
+
+
+def _hand_frames(seq):
+    left = np.sum(~np.isnan(seq[:, LEFT][:, 0, 0]))
+    right = np.sum(~np.isnan(seq[:, RIGHT][:, 0, 0]))
+    return int(max(left, right))
+
+
 def predict(features):
     frame = _to_frame(features)
     _buffer.append(frame)
@@ -93,10 +128,12 @@ def predict(features):
     no_right = np.isnan(frame[RIGHT, 0]).all()
     if no_left and no_right:
         return None
-    feats = sequence_features(np.stack(_buffer))
+    seq = np.stack(_buffer)
+    if _hand_frames(seq) < LIVE_MIN_HAND_FRAMES:
+        return None
+    feats = sequence_features(seq)
     if feats is None:
         return None
-    bundle = _load()
-    proba = bundle["model"].predict_proba(feats.reshape(1, -1))[0]
-    k = int(np.argmax(proba))
-    return bundle["words"][int(bundle["model"].classes_[k])], float(proba[k])
+    probs = _probabilities(feats)
+    k = int(np.argmax(probs))
+    return _load()["words"][k], float(probs[k])

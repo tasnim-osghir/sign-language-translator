@@ -37,6 +37,63 @@ _SPEAKABLE = re.compile(rf"[A-Za-z0-9 /\-]{{1,{MAX_TEXT_CHARS}}}")
 # Tells the worker thread to stop.
 _STOP = object()
 
+# A voice id or name that contains one of these is English
+# (e.g. "TTS_MS_EN-US_ZIRA_11.0", "Microsoft David Desktop - English").
+_ENGLISH_VOICE_NAME = re.compile(
+    r"EN-US|EN-GB|English|\bZira\b|\bDavid\b|\bMark\b", re.IGNORECASE
+)
+NO_ENGLISH_VOICE_WARNING = (
+    "No English voice found, using the default voice. "
+    "Install one in Windows Settings (Speech)."
+)
+
+
+def _language_codes(languages) -> list[str]:
+    """Language codes of a voice as lowercase str.
+
+    pyttsx3 gives a list of str (SAPI5, macOS), a list of bytes with a leading
+    priority byte (espeak, e.g. b"\\x05en-us"), a single value, or nothing.
+    """
+    if languages is None:
+        return []
+    if isinstance(languages, (str, bytes)):
+        languages = [languages]
+    codes = []
+    try:
+        for language in languages:
+            if isinstance(language, bytes):
+                language = language.decode("ascii", errors="ignore")
+            if isinstance(language, str):
+                # Drops the espeak priority byte and other control characters.
+                codes.append("".join(c for c in language if c.isprintable())
+                             .strip().lower())
+    except TypeError:  # not iterable
+        return []
+    return codes
+
+
+def is_english_voice(voice) -> bool:
+    """True if a pyttsx3 voice is English (from its languages, id or name)."""
+    for code in _language_codes(getattr(voice, "languages", None)):
+        if re.split(r"[-_]", code, maxsplit=1)[0] == "en":
+            return True
+    for label in (getattr(voice, "id", None), getattr(voice, "name", None)):
+        if isinstance(label, str) and _ENGLISH_VOICE_NAME.search(label):
+            return True
+    return False
+
+
+def find_english_voice_id(voices):
+    """Id of the first English voice in voices, or None."""
+    try:
+        for voice in voices or ():
+            voice_id = getattr(voice, "id", None)
+            if voice_id is not None and is_english_voice(voice):
+                return voice_id
+    except TypeError:  # not iterable
+        return None
+    return None
+
 
 class Backend(Protocol):
     def say(self, text: str) -> None:
@@ -69,6 +126,8 @@ class Pyttsx3Backend:
     A fresh pyttsx3 engine is built for each utterance: on Windows (SAPI5) a
     reused engine speaks only the first word, later runAndWait() calls return
     without speaking.
+    An English voice is selected on each engine: the default Windows voice
+    may be in another language (e.g. French).
     """
 
     def __init__(self):
@@ -77,12 +136,27 @@ class Pyttsx3Backend:
 
         self._pyttsx3 = pyttsx3
         self._com = _init_com()
+        self._warned_no_english = False
+
+    def _select_english_voice(self, engine) -> None:
+        # Never raises: on any problem the default voice is kept.
+        voice_id = None
+        with contextlib.suppress(Exception):
+            voice_id = find_english_voice_id(engine.getProperty("voices"))
+        if voice_id is not None:
+            with contextlib.suppress(Exception):
+                engine.setProperty("voice", voice_id)
+                return
+        if not self._warned_no_english:
+            self._warned_no_english = True
+            print(f"Warning: {NO_ENGLISH_VOICE_WARNING}")
 
     def say(self, text: str) -> None:
         # pyttsx3.Engine, not pyttsx3.init(): init() returns the cached engine
         # while it is still alive, which is the bug described above.
         engine = self._pyttsx3.Engine()
         try:
+            self._select_english_voice(engine)
             engine.say(text)
             engine.runAndWait()
         finally:

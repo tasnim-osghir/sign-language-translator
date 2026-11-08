@@ -85,7 +85,7 @@ def test_switch_happens_only_when_new_sign_reaches_min_votes():
         stabilizer.update(HELLO)
 
     # Apres k THANKS : HELLO a 10 - k votes, THANKS en a k.
-    # On compare les signes : la moyenne des confiances a des arrondis flottants.
+    # Compare the signs: the mean confidence has floating-point rounding.
     results = [stabilizer.update(THANKS) for _ in range(7)]
     signs = [r.sign if r is not None else None for r in results]
     assert signs[:3] == ["HELLO"] * 3     # HELLO a encore >= 7 votes
@@ -137,7 +137,7 @@ def test_weak_entries_break_stability():
     weak = Prediction("HELLO", 0.3)
     for prediction in [HELLO, weak, HELLO, weak, HELLO, weak, HELLO]:
         result = stabilizer.update(prediction)
-    assert result is None  # seulement 4 votes HELLO sur 7 requis
+    assert result is None  # only 4 HELLO votes out of 7 required
 
 
 def test_default_min_confidence_keeps_behavior():
